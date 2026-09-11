@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from pathlib import Path
 
 from datasets import load_dataset
 from flwr_datasets import FederatedDataset
@@ -14,7 +15,7 @@ from torchvision.models import resnet18, ResNet18_Weights
 
 from medmnist.dataset import BloodMNIST
 
-DATA_DIR = "./.medmnist"  # Directory to store the MedMNIST dataset
+DATA_DIR = Path("./data/.medmnist")  # Directory to store the MedMNIST dataset
 class Net(nn.Module):
     """Model (simple CNN adapted from 'PyTorch: A 60 Minute Blitz')"""
 
