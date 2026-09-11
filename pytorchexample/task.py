@@ -55,14 +55,14 @@ test_transforms = Compose([
 train_dataset = BloodMNIST(
     split="train",
     transform=train_transforms,
-    download=True,
+    download=False,
     root=DATA_DIR,
 )
 
 test_dataset = BloodMNIST(
     split="test",
     transform=test_transforms,
-    download=True,
+    download=False,
     root=DATA_DIR,
 )
 
