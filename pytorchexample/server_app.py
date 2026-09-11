@@ -19,9 +19,11 @@ def main(grid: Grid, context: Context) -> None:
     fraction_evaluate: float = context.run_config["fraction-evaluate"]
     num_rounds: int = context.run_config["num-server-rounds"]
     lr: float = context.run_config["learning-rate"]
+    num_classes: int = int(context.run_config.get("num-classes", context.run_config.get("num_classes", 8)))
+    data_dir: str = str(context.run_config.get("data-dir", context.run_config.get("data_dir", "")))
 
     # Load global model
-    global_model = Net()
+    global_model = Net(num_classes=num_classes)
     arrays = ArrayRecord(global_model.state_dict())
 
     # Initialize FedAvg strategy
@@ -33,7 +35,7 @@ def main(grid: Grid, context: Context) -> None:
         initial_arrays=arrays,
         train_config=ConfigRecord({"lr": lr}),
         num_rounds=num_rounds,
-        evaluate_fn=global_evaluate,
+        evaluate_fn=gen_evaluate_fn(data_dir=data_dir, num_classes=num_classes),
     )
 
     if context.run_config["save-model"]:
@@ -43,20 +45,25 @@ def main(grid: Grid, context: Context) -> None:
         torch.save(state_dict, "final_model.pt")
 
 
-def global_evaluate(server_round: int, arrays: ArrayRecord) -> MetricRecord:
-    """Evaluate model on central data."""
+def gen_evaluate_fn(data_dir: str, num_classes: int):
+    """Generate evaluation function with specified data_dir and num_classes."""
 
-    # Load the model and initialize it with the received weights
-    model = Net()
-    model.load_state_dict(arrays.to_torch_state_dict())
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    model.to(device)
+    def global_evaluate(server_round: int, arrays: ArrayRecord) -> MetricRecord:
+        """Evaluate model on central data."""
 
-    # Load entire test set
-    test_dataloader = load_centralized_dataset()
+        # Load the model and initialize it with the received weights
+        model = Net(num_classes=num_classes)
+        model.load_state_dict(arrays.to_torch_state_dict())
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        model.to(device)
 
-    # Evaluate the global model on the test set
-    test_loss, test_acc = test(model, test_dataloader, device)
+        # Load entire test set
+        test_dataloader = load_centralized_dataset(data_dir=data_dir) if data_dir else load_centralized_dataset()
 
-    # Return the evaluation metrics
-    return MetricRecord({"accuracy": test_acc, "loss": test_loss})
+        # Evaluate the global model on the test set
+        test_loss, test_acc = test(model, test_dataloader, device)
+
+        # Return the evaluation metrics
+        return MetricRecord({"accuracy": test_acc, "loss": test_loss})
+
+    return global_evaluate

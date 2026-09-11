@@ -15,17 +15,19 @@ from torchvision.models import resnet18, ResNet18_Weights
 
 from medmnist.dataset import BloodMNIST
 
-DATA_DIR = "/kaggle/input/datasets/arashnic/standardized-biomedical-images-medmnist"  # Directory to store the MedMNIST dataset
-class Net(nn.Module):
-    """Model (simple CNN adapted from 'PyTorch: A 60 Minute Blitz')"""
+DEFAULT_DATA_DIR = "/kaggle/input/datasets/arashnic/standardized-biomedical-images-medmnist"  # Default directory for the MedMNIST dataset
 
-    def __init__(self):
+
+class Net(nn.Module):
+    """Model (ResNet-18)"""
+
+    def __init__(self, num_classes: int = 8):
         super(Net, self).__init__()
         self.model = resnet18(weights=None)
-        self.model.fc = nn.Linear(self.model.fc.in_features, 8)
+        self.model.fc = nn.Linear(self.model.fc.in_features, num_classes)
 
     def forward(self, x):
-        return self.model(x)    
+        return self.model(x)
 
 
 fds = None  # Cache FederatedDataset
@@ -52,19 +54,33 @@ test_transforms = Compose([
     ),
 ])
 
-train_dataset = BloodMNIST(
-    split="train",
-    transform=train_transforms,
-    download=False,
-    root=DATA_DIR,
-)
+_train_dataset_cache = {}
+_test_dataset_cache = {}
 
-test_dataset = BloodMNIST(
-    split="test",
-    transform=test_transforms,
-    download=False,
-    root=DATA_DIR,
-)
+
+def get_train_dataset(data_dir: str = DEFAULT_DATA_DIR):
+    """Lazily load and cache BloodMNIST training dataset."""
+    if data_dir not in _train_dataset_cache:
+        _train_dataset_cache[data_dir] = BloodMNIST(
+            split="train",
+            transform=train_transforms,
+            download=False,
+            root=data_dir,
+        )
+    return _train_dataset_cache[data_dir]
+
+
+def get_test_dataset(data_dir: str = DEFAULT_DATA_DIR):
+    """Lazily load and cache BloodMNIST test dataset."""
+    if data_dir not in _test_dataset_cache:
+        _test_dataset_cache[data_dir] = BloodMNIST(
+            split="test",
+            transform=test_transforms,
+            download=False,
+            root=data_dir,
+        )
+    return _test_dataset_cache[data_dir]
+
 
 def apply_transforms(batch, transform):
     """Apply transforms to the partition from FederatedDataset."""
@@ -76,9 +92,10 @@ def load_data(
     partition_id: int,
     num_partitions: int,
     batch_size: int,
+    data_dir: str = DEFAULT_DATA_DIR,
 ):
     """Load one IID partition of BloodMNIST."""
-
+    train_dataset = get_train_dataset(data_dir)
     indices = np.arange(len(train_dataset))
 
     # Same partitioning every time
@@ -98,15 +115,8 @@ def load_data(
         client_indices,
     )
 
-    trainloader = DataLoader(
-        client_dataset,
-        batch_size=batch_size,
-        shuffle=True,
-    )
-
     # Client-local validation set
     val_size = int(0.2 * len(client_dataset))
-
     train_size = len(client_dataset) - val_size
 
     client_train, client_val = torch.utils.data.random_split(
@@ -129,9 +139,10 @@ def load_data(
 
     return trainloader, testloader
 
-def load_centralized_dataset():
-    """Load the complete BloodMNIST test set."""
 
+def load_centralized_dataset(data_dir: str = DEFAULT_DATA_DIR):
+    """Load the complete BloodMNIST test set."""
+    test_dataset = get_test_dataset(data_dir)
     return DataLoader(
         test_dataset,
         batch_size=128,
